@@ -1,11 +1,14 @@
 #!/bin/bash
 # ==========================================================================
-# SKRIP PEMBERSIHAN VM - bersihkan_vm.sh
+# SKRIP PEMBERSIHAN VM - bersihkan_vm.sh (versi Pertemuan 8)
 # Mata Pelajaran: Cloud Computing - Kelas XII SMK
-# Fungsi: membersihkan sisa praktikum P3-P6 (container, image, volume,
-#         network, build cache, folder & laporan lama) sebelum Pertemuan 8.
-#         Docker TETAP terpasang. Image di Docker Hub TIDAK ikut terhapus.
+# Fungsi: mengembalikan VM ke kondisi bersih sebelum Pertemuan 8:
+#         1) menghapus sisa praktikum P3-P6 (folder, laporan, skrip lama)
+#         2) menghapus Docker beserta semua container, image, dan volume
+#         Setelah skrip ini, siswa menginstal Docker lagi dari nol.
+#         Image yang sudah di-push ke Docker Hub TIDAK ikut terhapus.
 #
+# Skrip ini adalah versi otomatis dari Bagian A jobsheet Pertemuan 8.
 # Cara jalankan : bash bersihkan_vm.sh
 # ==========================================================================
 
@@ -15,17 +18,19 @@ echo "=========================================================="
 echo ""
 echo "Kondisi VM saat ini:"
 echo "----------------------------------------------------------"
-echo "Container : $(docker ps -aq 2>/dev/null | wc -l)"
-echo "Image     : $(docker images -q 2>/dev/null | wc -l)"
-echo "Volume    : $(docker volume ls -q 2>/dev/null | wc -l)"
+if command -v docker >/dev/null 2>&1; then
+  echo "Docker    : $(docker --version 2>/dev/null)"
+else
+  echo "Docker    : tidak terpasang"
+fi
 echo "Isi folder home:"
 ls -1 "$HOME"
 echo "----------------------------------------------------------"
 echo ""
 echo "PERHATIAN! Skrip ini akan MENGHAPUS PERMANEN:"
-echo "  - semua container, image, volume, network, dan build cache"
+echo "  - Docker beserta SEMUA container, image, volume, dan network"
 echo "  - data WordPress Pertemuan 5"
-echo "  - folder ~/wordpress-compose, file laporan_p*.txt, dan cek_*.sh"
+echo "  - folder ~/wordpress-compose, file laporan_*.txt, dan cek_*.sh"
 echo ""
 echo "Pastikan laporan & screenshot P5-P6 SUDAH diunggah ke Moodle."
 echo "Image Anda di Docker Hub TIDAK akan terhapus."
@@ -37,24 +42,9 @@ if [ "$KONFIRMASI" != "YA" ]; then
 fi
 
 echo ""
-echo "[1/6] Menghapus semua container..."
-CONTAINERS=$(docker ps -aq)
-if [ -n "$CONTAINERS" ]; then
-  docker rm -f $CONTAINERS >/dev/null
-fi
-
-echo "[2/6] Menghapus semua image, network, dan build cache..."
-docker system prune -a -f >/dev/null
-
-echo "[3/6] Menghapus semua volume..."
-VOLUMES=$(docker volume ls -q)
-if [ -n "$VOLUMES" ]; then
-  docker volume rm $VOLUMES >/dev/null
-fi
-
-echo "[4/6] Menghapus folder dan file praktikum lama..."
+echo "[1/5] Menghapus folder dan file praktikum lama..."
 rm -rf "$HOME/wordpress-compose"
-rm -f "$HOME"/laporan_p*.txt "$HOME"/laporan_transfer*.txt "$HOME"/cek_*.sh
+rm -f "$HOME"/laporan_*.txt "$HOME"/cek_*.sh
 
 echo ""
 echo "Folder yang masih tersisa di home:"
@@ -78,22 +68,38 @@ for f in $FOLDER_LAIN; do
   esac
 done
 
-echo "[5/6] Logout dari Docker Hub..."
-docker logout >/dev/null 2>&1
+echo "[2/5] Menghentikan layanan Docker..."
+sudo systemctl stop docker.socket docker containerd >/dev/null 2>&1
 
-echo "[6/6] Verifikasi hasil..."
+echo "[3/5] Menghapus paket Docker..."
+for pkg in docker-ce docker-ce-cli containerd.io docker-buildx-plugin \
+           docker-compose-plugin docker-ce-rootless-extras \
+           docker.io docker-doc docker-compose docker-compose-v2 \
+           podman-docker containerd runc; do
+  sudo apt-get purge -y "$pkg" >/dev/null 2>&1
+done
+sudo apt-get autoremove -y >/dev/null 2>&1
+
+echo "[4/5] Menghapus data Docker, repo apt Docker, dan login lama..."
+sudo rm -rf /var/lib/docker /var/lib/containerd
+sudo rm -f /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.sources
+sudo rm -f /etc/apt/keyrings/docker.asc /etc/apt/keyrings/docker.gpg
+rm -rf "$HOME/.docker"
+
+echo "[5/5] Verifikasi hasil..."
 echo ""
 echo "=========================================================="
 echo " HASIL PEMBERSIHAN"
 echo "=========================================================="
-echo "Container tersisa : $(docker ps -aq | wc -l)"
-echo "Image tersisa     : $(docker images -q | wc -l)"
-echo "Volume tersisa    : $(docker volume ls -q | wc -l)"
+if command -v docker >/dev/null 2>&1; then
+  echo "Docker : MASIH TERPASANG - hubungi guru"
+else
+  echo "Docker : sudah terhapus"
+fi
 echo "----------------------------------------------------------"
 df -h / | awk 'NR==1 || NR==2'
 echo "=========================================================="
-echo "VM siap untuk Pertemuan 8. Lanjutkan dengan:"
-echo "  docker load -i odoo18.tar"
+echo "VM bersih. Lanjutkan ke Bagian B jobsheet (instalasi Docker)."
 echo "=========================================================="
 
 # Hapus skrip ini sendiri agar home benar-benar bersih
